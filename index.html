@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>汽、機車抽籤 - 終極相容除錯版</title>
+    <title>汽、機車抽籤 - 終極穩定版</title>
     <style>
         :root {
             --primary-gold: #D4AF37;
@@ -254,221 +254,293 @@
 
     <div class="debug-panel">
         <strong style="color: #333;">⚙️ 系統狀態診斷器：</strong>
-        <div id="debugLog">系統已加載。請匯入名單或嘗試點擊「新增此獎項」。</div>
+        <div id="debugLog">系統載入中...</div>
     </div>
 </div>
 
 <script>
-    // 預設基礎獎項
-    let prizeConfig = [
+    // 使用最穩定的全域變數宣告，避免 ES6 語法不相容
+    var prizeConfig = [
         { id: 'p1', name: "特等汽車位", total: 1, winners: [] },
         { id: 'p2', name: "一等機車位", total: 2, winners: [] }
     ];
+    var candidateList = []; 
+    var usedNumbers = new Set(); 
 
-    let candidateList = []; // 儲存由記事本讀入的名單
-    let usedNumbers = new Set(); // 已中獎的名單
+    var display = document.getElementById('display');
+    var fileInput = document.getElementById('fileInput');
+    var statusInfo = document.getElementById('statusInfo');
+    var debugLog = document.getElementById('debugLog');
 
-    // 常用 DOM
-    let display, fileInput, statusInfo, debugLog;
-
-    // 寫入除錯紀錄的輔助函式
     function writeLog(msg) {
+        console.log(msg);
         if (debugLog) {
-            debugLog.innerHTML += "<br>⚡ " + msg;
-        } else {
-            console.log(msg);
+            debugLog.innerHTML += "<div>⚡ " + msg + "</div>";
         }
     }
 
-    // 確保 DOM 載入後才執行，防止 null 指標
-    window.onload = function() {
-        try {
-            display = document.getElementById('display');
-            fileInput = document.getElementById('fileInput');
-            statusInfo = document.getElementById('statusInfo');
-            debugLog = document.getElementById('debugLog');
-
-            writeLog("網頁初始化成功。預設獎項載入完成。");
-            
-            // 綁定檔案上傳事件
-            if (fileInput) {
-                fileInput.addEventListener('change', handleFileImport);
-                writeLog("檔案上傳接聽程式已成功綁定。");
-            }
-
-            renderTable();
-        } catch (e) {
-            alert("初始化發生錯誤：" + e.message);
-        }
-    };
-
-    // 方法 A：處理檔案匯入
-    function handleFileImport(e) {
-        writeLog("偵測到檔案變更...");
-        const file = e.target.files[0];
-        if (!file) {
-            writeLog("未選取任何檔案。");
-            return;
-        }
-
-        const reader = new FileReader();
-        reader.onload = function(event) {
-            try {
-                const content = event.target.result;
-                processRawText(content);
-                writeLog(`檔案讀取成功！共分析出 ${candidateList.length} 筆名單。`);
-            } catch (err) {
-                writeLog("讀取檔案出錯：" + err.message);
-                alert("讀取檔案失敗：" + err.message);
-            }
-        };
-        reader.onerror = function() {
-            writeLog("FileReader 發生錯誤。");
-        };
+    // 初始化網頁與綁定檔案上傳監聽
+    try {
+        if (debugLog) debugLog.innerHTML = ""; // 清除初始文字
+        writeLog("腳本完全載入成功！");
         
-        // 使用萬用 UTF-8 讀取
-        reader.readAsText(file, 'UTF-8');
+        if (fileInput) {
+            fileInput.onchange = function(e) {
+                writeLog("偵測到選擇檔案變更！開始讀取...");
+                var file = e.target.files[0];
+                if (!file) return;
+
+                var reader = new FileReader();
+                reader.onload = function(evt) {
+                    try {
+                        processRawText(evt.target.result);
+                        writeLog("檔案名單匯入成功！共 " + candidateList.length + " 筆名單。");
+                    } catch(err) {
+                        writeLog("解析檔案錯誤: " + err.message);
+                    }
+                };
+                reader.readAsText(file, 'UTF-8');
+            };
+            writeLog("檔案上傳事件已完成綁定。");
+        }
+        
+        renderTable();
+        writeLog("預設表格渲染完成，系統就緒。");
+    } catch(e) {
+        alert("初始化發生致命錯誤: " + e.message);
     }
 
-    // 方法 B：從文字框匯入
+    // 處理手動輸入框名單匯入
     function importFromTextArea() {
-        writeLog("正在從文字輸入框匯入名單...");
-        const textarea = document.getElementById('textInput');
+        writeLog("點擊『確認匯入文字名單』按鈕。");
+        var textarea = document.getElementById('textInput');
         if (!textarea) {
-            writeLog("找不到文字輸入框 DOM。");
+            writeLog("錯誤：找不到文字框 textInput 節點！");
             return;
         }
-        
-        const content = textarea.value;
-        if (!content.trim()) {
-            alert("請先在輸入框內貼上您的名單！");
-            writeLog("輸入框為空。");
+        var val = textarea.value;
+        if (!val.trim()) {
+            alert("請先在下方輸入框內貼上您的名單！");
+            writeLog("匯入中止：文字框為空。");
             return;
         }
-
-        processRawText(content);
-        writeLog(`手動貼上匯入成功！共解析出 ${candidateList.length} 筆名單。`);
-        alert(`成功匯入 ${candidateList.length} 筆名單！`);
+        try {
+            processRawText(val);
+            writeLog("輸入框名單匯入成功！共 " + candidateList.length + " 筆。");
+            alert("成功匯入 " + candidateList.length + " 筆名單！");
+        } catch(err) {
+            writeLog("解析文字框錯誤: " + err.message);
+        }
     }
 
-    // 統一解析文字名單的函式
+    // 統一解析文字內容
     function processRawText(rawText) {
-        candidateList = rawText.split(/\r?\n/)
-                               .map(line => line.trim())
-                               .filter(line => line.length > 0);
-        
-        if (candidateList.length === 0) {
-            display.innerText = "請重新匯入名單";
-            statusInfo.innerText = "名單為空";
-            return;
+        var tempLines = rawText.split('\n');
+        candidateList = [];
+        for (var i = 0; i < tempLines.length; i++) {
+            var line = tempLines[i].trim();
+            if (line.length > 0) {
+                candidateList.push(line);
+            }
         }
-
-        // 重設抽籤進度
-        usedNumbers.clear();
-        prizeConfig.forEach(p => p.winners = []);
         
-        statusInfo.innerText = `已匯入名單共：${candidateList.length} 筆 | 狀態：嚴格不重複公平抽獎`;
-        display.innerText = "名單匯入成功，可以開始抽籤";
+        usedNumbers.clear();
+        for (var j = 0; j < prizeConfig.length; j++) {
+            prizeConfig[j].winners = [];
+        }
+        
+        if (statusInfo) {
+            statusInfo.innerText = "已匯入名單共：" + candidateList.length + " 筆 | 狀態：嚴格不重複公平抽獎";
+        }
+        if (display) {
+            display.innerText = "名單匯入成功，可以開始抽籤";
+        }
         renderTable();
     }
 
-    // 渲染獎項表格
+    // 渲染獎項表格 (不使用箭頭函式)
     function renderTable() {
-        try {
-            const tbody = document.getElementById('prizeTableBody');
-            if (!tbody) {
-                writeLog("找不到表格主體 (prizeTableBody) DOM 節點。");
-                return;
-            }
-
-            if (prizeConfig.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:#999;">目前無任何獎項，請於上方欄位新增獎項！</td></tr>`;
-                return;
-            }
-
-            tbody.innerHTML = prizeConfig.map(p => {
-                const total = Number(p.total);
-                const currentWinners = p.winners ? p.winners.length : 0;
-                const isWinnerFull = currentWinners >= total;
-                const isNoList = candidateList.length === 0;
-
-                return `
-                    <tr>
-                        <td>
-                            <strong>${p.name}</strong><br>
-                            <small style="color:#888">名額：${total}</small><br>
-                            <button type="button" class="btn-delete-prize" onclick="deletePrize('${p.id}')">刪除此獎項</button>
-                        </td>
-                        <td>
-                            ${(p.winners || []).map(num => `
-                                <span class="winner-tag">
-                                    ${num}
-                                    <span class="delete-btn" onclick="removeWinner('${p.id}', '${num}')" title="重抽此名額">✕</span>
-                                </span>
-                            `).join('')}
-                        </td>
-                        <td>
-                            <button type="button" class="btn-draw" id="btn-${p.id}" 
-                                    onclick="handleDraw('${p.id}')" 
-                                    ${isWinnerFull || isNoList ? 'disabled' : ''}>
-                                ${isNoList ? '請先匯入名單' : (isWinnerFull ? '已滿額' : '開始抽取')}
-                            </button>
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-            writeLog("表格渲染（Render）成功。");
-        } catch (err) {
-            writeLog("表格渲染發生崩潰：" + err.message);
+        var tbody = document.getElementById('prizeTableBody');
+        if (!tbody) return;
+        
+        if (prizeConfig.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#999;">目前無任何獎項，請於上方欄位新增獎項！</td></tr>';
+            return;
         }
+
+        var html = '';
+        for (var i = 0; i < prizeConfig.length; i++) {
+            var p = prizeConfig[i];
+            
+            // 處理得獎人標籤
+            var winnersHtml = '';
+            for (var w = 0; w < p.winners.length; w++) {
+                var name = p.winners[w];
+                winnersHtml += '<span class="winner-tag">' + name + 
+                               '<span class="delete-btn" onclick="removeWinner(\'' + p.id + '\', \'' + name + '\')">✕</span></span>';
+            }
+            
+            var isFull = p.winners.length >= p.total;
+            var isDisabled = isFull || candidateList.length === 0;
+            var btnText = candidateList.length === 0 ? '請先匯入名單' : (isFull ? '已滿額' : '開始抽取');
+
+            html += '<tr>' +
+                    '<td><strong>' + p.name + '</strong><br><small style="color:#888">名額：' + p.total + '</small><br><button type="button" class="btn-delete-prize" onclick="deletePrize(\'' + p.id + '\')">刪除此獎項</button></td>' +
+                    '<td>' + winnersHtml + '</td>' +
+                    '<td><button type="button" class="btn-draw" id="btn-' + p.id + '" onclick="handleDraw(\'' + p.id + '\')" ' + (isDisabled ? 'disabled' : '') + '>' + btnText + '</button></td>' +
+                    '</tr>';
+        }
+        tbody.innerHTML = html;
     }
 
     // 新增自訂獎項
     function addCustomPrize() {
-        try {
-            writeLog("正在點擊新增獎項...");
-            const nameInput = document.getElementById('newPrizeName');
-            const totalInput = document.getElementById('newPrizeTotal');
-
-            if (!nameInput || !totalInput) {
-                writeLog("找不到新增欄位的 DOM 元素。");
-                return;
-            }
-
-            const name = nameInput.value.trim();
-            const total = parseInt(totalInput.value, 10);
-
-            if (!name) {
-                alert("請輸入獎項名稱！");
-                writeLog("新增失敗：未輸入獎項名稱。");
-                return;
-            }
-            if (isNaN(total) || total <= 0) {
-                alert("名額必須是正整數（大於0）！");
-                writeLog("新增失敗：名額格式不對。");
-                return;
-            }
-
-            const newId = 'p_' + Date.now();
-            prizeConfig.push({
-                id: newId,
-                name: name,
-                total: total,
-                winners: []
-            });
-
-            writeLog(`成功新增獎項：[${name}]，名額 ${total} 位。`);
-
-            // 清空輸入欄位
-            nameInput.value = '';
-            totalInput.value = '1';
-
-            renderTable();
-        } catch (err) {
-            writeLog("新增獎項發生錯誤：" + err.message);
-            alert("新增失敗，錯誤回報：" + err.message);
+        writeLog("點擊『新增此獎項』按鈕。");
+        var nameInput = document.getElementById('newPrizeName');
+        var totalInput = document.getElementById('newPrizeTotal');
+        
+        if (!nameInput || !totalInput) {
+            writeLog("錯誤：找不到欄位 DOM 節點！");
+            return;
         }
+
+        var name = nameInput.value.trim();
+        var total = parseInt(totalInput.value, 10);
+
+        if (!name) {
+            alert("請輸入獎項名稱！");
+            writeLog("新增失敗：名稱為空。");
+            return;
+        }
+        if (isNaN(total) || total <= 0) {
+            alert("名額必須大於 0！");
+            writeLog("新增失敗：名額非正整數。");
+            return;
+        }
+
+        prizeConfig.push({
+            id: 'p_' + Date.now(),
+            name: name,
+            total: total,
+            winners: []
+        });
+
+        writeLog("成功新增獎項：" + name + " (名額: " + total + ")");
+        nameInput.value = '';
+        totalInput.value = '1';
+        renderTable();
     }
 
     // 刪除自訂獎項
-    function deletePrize(prize
+    function deletePrize(id) {
+        if (!confirm("確定要刪除這個獎項嗎？此獎項已抽出的得獎人將會釋放回名單中。")) return;
+        
+        var targetPrize = null;
+        for (var i = 0; i < prizeConfig.length; i++) {
+            if (prizeConfig[i].id === id) {
+                targetPrize = prizeConfig[i];
+                break;
+            }
+        }
+        
+        if (targetPrize) {
+            for (var w = 0; w < targetPrize.winners.length; w++) {
+                usedNumbers.delete(targetPrize.winners[w]);
+            }
+        }
+
+        var tempConfig = [];
+        for (var j = 0; j < prizeConfig.length; j++) {
+            if (prizeConfig[j].id !== id) {
+                tempConfig.push(prizeConfig[j]);
+            }
+        }
+        prizeConfig = tempConfig;
+        
+        renderTable();
+        if (display) display.innerText = "READY";
+        writeLog("已刪除一個獎項。");
+    }
+
+    // 刪除個別中獎人（重抽）
+    function removeWinner(prizeId, name) {
+        if (!confirm("確定要取消 [ " + name + " ] 的中獎資格並放回名單中嗎？")) return;
+        
+        for (var i = 0; i < prizeConfig.length; i++) {
+            if (prizeConfig[i].id === prizeId) {
+                var tempWinners = [];
+                for (var w = 0; w < prizeConfig[i].winners.length; w++) {
+                    if (prizeConfig[i].winners[w] !== name) {
+                        tempWinners.push(prizeConfig[i].winners[w]);
+                    }
+                }
+                prizeConfig[i].winners = tempWinners;
+                break;
+            }
+        }
+        usedNumbers.delete(name);
+        renderTable();
+        if (display) display.innerText = "READY";
+        writeLog("已重置中獎人: " + name);
+    }
+
+    // 執行抽籤
+    function handleDraw(prizeId) {
+        if (candidateList.length === 0) {
+            alert("請先上傳名單檔案！");
+            return;
+        }
+
+        var available = [];
+        for (var i = 0; i < candidateList.length; i++) {
+            if (!usedNumbers.has(candidateList[i])) {
+                available.push(candidateList[i]);
+            }
+        }
+
+        if (available.length === 0) {
+            alert("抽籤池已空！所有人均已中獎。");
+            return;
+        }
+
+        var btns = document.querySelectorAll('.btn-draw');
+        for (var b = 0; b < btns.length; b++) {
+            btns[b].disabled = true;
+        }
+        
+        if (display) display.classList.add('active');
+
+        var counter = 0;
+        var interval = setInterval(function() {
+            var tempIndex = Math.floor(Math.random() * available.length);
+            if (display) display.innerText = available[tempIndex];
+            counter++;
+            
+            if (counter > 20) {
+                clearInterval(interval);
+                
+                var finalIndex = Math.floor(Math.random() * available.length);
+                var winner = available[finalIndex];
+                
+                usedNumbers.add(winner);
+                
+                for (var j = 0; j < prizeConfig.length; j++) {
+                    if (prizeConfig[j].id === prizeId) {
+                        prizeConfig[j].winners.push(winner);
+                        break;
+                    }
+                }
+                
+                if (display) {
+                    display.innerText = winner;
+                    display.classList.remove('active');
+                }
+                renderTable();
+                writeLog("抽出中獎者：" + winner);
+            }
+        }, 50);
+    }
+</script>
+
+</body>
+</html>
