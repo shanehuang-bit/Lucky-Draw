@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>汽、機車抽籤 - 穩定修正版</title>
+    <title>汽、機車抽籤 - 終極相容除錯版</title>
     <style>
         :root {
             --primary-gold: #D4AF37;
@@ -13,7 +13,7 @@
         }
 
         body {
-            font-family: "SF Pro Display", "Microsoft JhengHei", sans-serif;
+            font-family: "Microsoft JhengHei", sans-serif;
             background-color: var(--bg-color);
             display: flex;
             flex-direction: column;
@@ -61,6 +61,18 @@
             padding: 12px;
             border-radius: 8px;
             border: 2px dashed #ccc;
+            margin-bottom: 10px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 100px;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 0.9rem;
+            box-sizing: border-box;
+            resize: vertical;
         }
 
         /* 獎項表單 */
@@ -81,16 +93,21 @@
             border: 1px solid #ccc;
             border-radius: 5px;
         }
-        .btn-add-prize {
+        
+        button {
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.2s;
+        }
+
+        .btn-add-prize, .btn-import-text {
             background: var(--dark-blue);
             color: white;
             border: none;
             padding: 8px 15px;
             border-radius: 5px;
-            cursor: pointer;
-            font-weight: bold;
         }
-        .btn-add-prize:hover { background: #001a5c; }
+        .btn-add-prize:hover, .btn-import-text:hover { background: #001a5c; }
 
         /* 跑馬燈 */
         .display-area {
@@ -126,9 +143,6 @@
             color: white;
             border: none;
             border-radius: 10px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: 0.2s;
             box-shadow: 0 4px 0 #8a0b1f;
         }
 
@@ -142,7 +156,6 @@
             color: white;
             border: none;
             border-radius: 5px;
-            cursor: pointer;
             font-size: 0.85rem;
             margin-top: 5px;
         }
@@ -175,9 +188,21 @@
             align-items: center;
             background: rgba(255,255,255,0.15);
             border-radius: 50%;
-            transition: 0.2s;
         }
         .delete-btn:hover { background: #ff4444; color: white; }
+
+        /* 系統除錯檢視區 */
+        .debug-panel {
+            margin-top: 30px;
+            background: #eee;
+            border: 1px solid #ccc;
+            padding: 15px;
+            border-radius: 10px;
+            font-family: monospace;
+            text-align: left;
+            font-size: 0.85rem;
+            color: #555;
+        }
 
         @keyframes popIn { 0% { transform: scale(0); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
     </style>
@@ -186,20 +211,28 @@
 
 <div class="container">
     <h1>🚗 汽、機車抽籤 🛵</h1>
-    <div class="info" id="statusInfo">請先匯入記事本 (.txt) 名單，並設定好您的獎項。 | 狀態：嚴格不重複公平抽獎</div>
+    <div class="info" id="statusInfo">狀態：嚴格不重複公平抽獎</div>
 
     <div class="setup-section">
         <div class="setup-row">
-            <label for="fileInput">步驟一：匯入抽籤名單 (.txt)</label>
+            <label>步驟一：輸入抽籤名單（二選一）</label>
+            
             <div class="upload-box">
+                <span style="font-size: 0.85rem; color:#666; display:block; margin-bottom: 5px;">方法 A：選擇電腦裡的記事本 (.txt) 檔案</span>
                 <input type="file" id="fileInput" accept=".txt">
+            </div>
+
+            <div style="background: #fcfcfc; padding: 12px; border: 1px solid #ddd; border-radius: 8px;">
+                <span style="font-size: 0.85rem; color:#666; display:block; margin-bottom: 5px;">方法 B：直接將名單複製並貼在下方（每行一個人名）</span>
+                <textarea id="textInput" placeholder="請在此貼上名單...例如：&#10;王大明&#10;李小美&#10;張三"></textarea>
+                <button type="button" class="btn-import-text" onclick="importFromTextArea()" style="margin-top: 8px;">確認匯入文字名單</button>
             </div>
         </div>
 
-        <div class="setup-row">
+        <div class="setup-row" style="border-top: 1px solid #eee; padding-top: 15px;">
             <label>步驟二：設定獎項內容</label>
             <div class="prize-form">
-                <input type="text" id="newPrizeName" placeholder="例如：一獎：特等汽車位">
+                <input type="text" id="newPrizeName" placeholder="例如：三獎：一般汽車位">
                 <input type="number" id="newPrizeTotal" placeholder="名額" min="1" value="1">
                 <button type="button" class="btn-add-prize" onclick="addCustomPrize()">新增此獎項</button>
             </div>
@@ -218,10 +251,15 @@
         </thead>
         <tbody id="prizeTableBody"></tbody>
     </table>
+
+    <div class="debug-panel">
+        <strong style="color: #333;">⚙️ 系統狀態診斷器：</strong>
+        <div id="debugLog">系統已加載。請匯入名單或嘗試點擊「新增此獎項」。</div>
+    </div>
 </div>
 
 <script>
-    // 預設獎項
+    // 預設基礎獎項
     let prizeConfig = [
         { id: 'p1', name: "特等汽車位", total: 1, winners: [] },
         { id: 'p2', name: "一等機車位", total: 2, winners: [] }
@@ -230,84 +268,207 @@
     let candidateList = []; // 儲存由記事本讀入的名單
     let usedNumbers = new Set(); // 已中獎的名單
 
-    // 取得常用的 DOM 元素
-    const display = document.getElementById('display');
-    const fileInput = document.getElementById('fileInput');
-    const statusInfo = document.getElementById('statusInfo');
+    // 常用 DOM
+    let display, fileInput, statusInfo, debugLog;
 
-    // 初始化：等 DOM 元素完全加載後再渲染表格與綁定事件
-    document.addEventListener('DOMContentLoaded', function() {
-        renderTable();
-        
-        // 綁定檔案上傳事件
-        if (fileInput) {
-            fileInput.addEventListener('change', handleFileImport);
+    // 寫入除錯紀錄的輔助函式
+    function writeLog(msg) {
+        if (debugLog) {
+            debugLog.innerHTML += "<br>⚡ " + msg;
+        } else {
+            console.log(msg);
         }
-    });
+    }
 
-    // 檔案匯入處理
+    // 確保 DOM 載入後才執行，防止 null 指標
+    window.onload = function() {
+        try {
+            display = document.getElementById('display');
+            fileInput = document.getElementById('fileInput');
+            statusInfo = document.getElementById('statusInfo');
+            debugLog = document.getElementById('debugLog');
+
+            writeLog("網頁初始化成功。預設獎項載入完成。");
+            
+            // 綁定檔案上傳事件
+            if (fileInput) {
+                fileInput.addEventListener('change', handleFileImport);
+                writeLog("檔案上傳接聽程式已成功綁定。");
+            }
+
+            renderTable();
+        } catch (e) {
+            alert("初始化發生錯誤：" + e.message);
+        }
+    };
+
+    // 方法 A：處理檔案匯入
     function handleFileImport(e) {
+        writeLog("偵測到檔案變更...");
         const file = e.target.files[0];
-        if (!file) return;
+        if (!file) {
+            writeLog("未選取任何檔案。");
+            return;
+        }
 
         const reader = new FileReader();
         reader.onload = function(event) {
             try {
                 const content = event.target.result;
-                // 分割行，清除前後空白並過濾掉空行
-                candidateList = content.split(/\r?\n/)
-                                       .map(line => line.trim())
-                                       .filter(line => line.length > 0);
-                
-                if (candidateList.length === 0) {
-                    alert("匯入失敗：此記事本檔案內沒有任何名單資料！");
-                    display.innerText = "請重新匯入名單";
-                    return;
-                }
-
-                // 成功讀取後重設狀態
-                usedNumbers.clear();
-                prizeConfig.forEach(p => p.winners = []);
-                
-                statusInfo.innerText = `已匯入名單共：${candidateList.length} 筆 | 狀態：嚴格不重複公平抽獎`;
-                display.innerText = "名單匯入成功，可以開始抽籤";
-                renderTable();
+                processRawText(content);
+                writeLog(`檔案讀取成功！共分析出 ${candidateList.length} 筆名單。`);
             } catch (err) {
-                alert("檔案讀取過程中發生錯誤，請確保它是正確的 .txt 檔案。");
-                console.error(err);
+                writeLog("讀取檔案出錯：" + err.message);
+                alert("讀取檔案失敗：" + err.message);
             }
         };
-
-        // 預設以最通用的 UTF-8 編碼讀取文字
+        reader.onerror = function() {
+            writeLog("FileReader 發生錯誤。");
+        };
+        
+        // 使用萬用 UTF-8 讀取
         reader.readAsText(file, 'UTF-8');
     }
 
-    // 渲染表格
-    function renderTable() {
-        const tbody = document.getElementById('prizeTableBody');
-        if (!tbody) return;
-
-        if (prizeConfig.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:#999;">目前無任何獎項，請於上方欄位新增獎項！</td></tr>`;
+    // 方法 B：從文字框匯入
+    function importFromTextArea() {
+        writeLog("正在從文字輸入框匯入名單...");
+        const textarea = document.getElementById('textInput');
+        if (!textarea) {
+            writeLog("找不到文字輸入框 DOM。");
+            return;
+        }
+        
+        const content = textarea.value;
+        if (!content.trim()) {
+            alert("請先在輸入框內貼上您的名單！");
+            writeLog("輸入框為空。");
             return;
         }
 
-        tbody.innerHTML = prizeConfig.map(p => `
-            <tr>
-                <td>
-                    <strong>${p.name}</strong><br>
-                    <small style="color:#888">名額：${p.total}</small><br>
-                    <button type="button" class="btn-delete-prize" onclick="deletePrize('${p.id}')">刪除此獎項</button>
-                </td>
-                <td>
-                    ${p.winners.map(num => `
-                        <span class="winner-tag">
-                            ${num}
-                            <span class="delete-btn" onclick="removeWinner('${p.id}', '${num}')" title="重抽此名額">✕</span>
-                        </span>
-                    `).join('')}
-                </td>
-                <td>
-                    <button type="button" class="btn-draw" id="btn-${p.id}" 
-                            onclick="handleDraw('${p.id}')" 
-                            ${p.winners.length >= p.total \vert{}\vert{} candidateList.length === 0 ? 'disabled' : ''}>${candidateList.length === 0 ? '請先匯入名單' :
+        processRawText(content);
+        writeLog(`手動貼上匯入成功！共解析出 ${candidateList.length} 筆名單。`);
+        alert(`成功匯入 ${candidateList.length} 筆名單！`);
+    }
+
+    // 統一解析文字名單的函式
+    function processRawText(rawText) {
+        candidateList = rawText.split(/\r?\n/)
+                               .map(line => line.trim())
+                               .filter(line => line.length > 0);
+        
+        if (candidateList.length === 0) {
+            display.innerText = "請重新匯入名單";
+            statusInfo.innerText = "名單為空";
+            return;
+        }
+
+        // 重設抽籤進度
+        usedNumbers.clear();
+        prizeConfig.forEach(p => p.winners = []);
+        
+        statusInfo.innerText = `已匯入名單共：${candidateList.length} 筆 | 狀態：嚴格不重複公平抽獎`;
+        display.innerText = "名單匯入成功，可以開始抽籤";
+        renderTable();
+    }
+
+    // 渲染獎項表格
+    function renderTable() {
+        try {
+            const tbody = document.getElementById('prizeTableBody');
+            if (!tbody) {
+                writeLog("找不到表格主體 (prizeTableBody) DOM 節點。");
+                return;
+            }
+
+            if (prizeConfig.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:#999;">目前無任何獎項，請於上方欄位新增獎項！</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = prizeConfig.map(p => {
+                const total = Number(p.total);
+                const currentWinners = p.winners ? p.winners.length : 0;
+                const isWinnerFull = currentWinners >= total;
+                const isNoList = candidateList.length === 0;
+
+                return `
+                    <tr>
+                        <td>
+                            <strong>${p.name}</strong><br>
+                            <small style="color:#888">名額：${total}</small><br>
+                            <button type="button" class="btn-delete-prize" onclick="deletePrize('${p.id}')">刪除此獎項</button>
+                        </td>
+                        <td>
+                            ${(p.winners || []).map(num => `
+                                <span class="winner-tag">
+                                    ${num}
+                                    <span class="delete-btn" onclick="removeWinner('${p.id}', '${num}')" title="重抽此名額">✕</span>
+                                </span>
+                            `).join('')}
+                        </td>
+                        <td>
+                            <button type="button" class="btn-draw" id="btn-${p.id}" 
+                                    onclick="handleDraw('${p.id}')" 
+                                    ${isWinnerFull || isNoList ? 'disabled' : ''}>
+                                ${isNoList ? '請先匯入名單' : (isWinnerFull ? '已滿額' : '開始抽取')}
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            writeLog("表格渲染（Render）成功。");
+        } catch (err) {
+            writeLog("表格渲染發生崩潰：" + err.message);
+        }
+    }
+
+    // 新增自訂獎項
+    function addCustomPrize() {
+        try {
+            writeLog("正在點擊新增獎項...");
+            const nameInput = document.getElementById('newPrizeName');
+            const totalInput = document.getElementById('newPrizeTotal');
+
+            if (!nameInput || !totalInput) {
+                writeLog("找不到新增欄位的 DOM 元素。");
+                return;
+            }
+
+            const name = nameInput.value.trim();
+            const total = parseInt(totalInput.value, 10);
+
+            if (!name) {
+                alert("請輸入獎項名稱！");
+                writeLog("新增失敗：未輸入獎項名稱。");
+                return;
+            }
+            if (isNaN(total) || total <= 0) {
+                alert("名額必須是正整數（大於0）！");
+                writeLog("新增失敗：名額格式不對。");
+                return;
+            }
+
+            const newId = 'p_' + Date.now();
+            prizeConfig.push({
+                id: newId,
+                name: name,
+                total: total,
+                winners: []
+            });
+
+            writeLog(`成功新增獎項：[${name}]，名額 ${total} 位。`);
+
+            // 清空輸入欄位
+            nameInput.value = '';
+            totalInput.value = '1';
+
+            renderTable();
+        } catch (err) {
+            writeLog("新增獎項發生錯誤：" + err.message);
+            alert("新增失敗，錯誤回報：" + err.message);
+        }
+    }
+
+    // 刪除自訂獎項
+    function deletePrize(prize
